@@ -103,25 +103,25 @@ def writeResultsToFile(pathNames, simulationDssFile, resultsDssFile,n):
 
         if fid.recordExists(pathName):
             tsc = fid.get(pathName)
+            if tsc.values is not None:
+                parts = tsc.fullName.split('/')
+                parts[6] = parts[6][:-3] + nStr
+                newPathName = '/'.join(parts)
 
-            parts = tsc.fullName.split('/')
-            parts[6] = parts[6][:-3] + nStr
-            newPathName = '/'.join(parts)
+                newTs = TimeSeriesContainer()
+                newTs.version = newPathName.split('/')[-2]
+                newTs.fullName = newPathName
+                newTs.timeGranularitySeconds = tsc.timeGranularitySeconds
+                newTs.type = tsc.type
+                newTs.units = tsc.units
+                newTs.interval = tsc.interval
+                newTs.numberValues = tsc.numberValues
+                newTs.times = tsc.times
+                newTs.values = tsc.values
 
-            newTs = TimeSeriesContainer()
-            newTs.version = newPathName.split('/')[-2]
-            newTs.fullName = newPathName
-            newTs.timeGranularitySeconds = tsc.timeGranularitySeconds
-            newTs.type = tsc.type
-            newTs.units = tsc.units
-            newTs.interval = tsc.interval
-            newTs.numberValues = tsc.numberValues
-            newTs.times = tsc.times
-            newTs.values = tsc.values
-
-            results = HecDss.open(resultsDssFile)
-            results.put(newTs)
-            results.done()
+                results = HecDss.open(resultsDssFile)
+                results.put(newTs)
+                results.done()
         else:
             print 'here'
     fid.done()
@@ -286,7 +286,7 @@ def main(pattern, baseRoot):
 
         # Delete simulation files for next iteration
         os.remove(r"%s\simulation.dss" %(simulationDssDir))
-        # os.remove(templateDb)
+        os.remove(templateDb)
 
         if n == 3:
 
@@ -295,6 +295,6 @@ def main(pattern, baseRoot):
 if __name__ == '__main__':
 
     baseRoot = r"C:\workspace\Folsom\FolsomSOU-EnsembleMemberShuffle"
-    pattern = '1986'
+    pattern = '1997'
 
     main(pattern, baseRoot)
