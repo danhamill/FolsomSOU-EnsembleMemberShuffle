@@ -53,8 +53,7 @@ def configureResSim(watershedWkspFile, simName, altName):
     assert simRun is not None, "ERROR: Failed to find SimulationRun: %s " %(altName)
 
     simRun.getRssAlt().setLogLevel(LogLevel)		#log level controls how much messaging is sent to the console and log
-    simMgr.setComputeAll(Constants.TRUE)
-
+    simMgr.setComputeAll(Constants.TRUE) # Force compute
 
     return simMgr, simRun, rmiWksp, user
 
@@ -67,7 +66,7 @@ def myLogger(name, path):
     logger.addHandler(handler)
     return logger
 
-def archiveSimulationResults(aepList, pattern, patternName, resultsDir, simulationDssDir, n, seedNumber):
+def archiveSimulationResults(aepList, pattern, patternName, resultsDssFile, simulationDssDir, n):
 
     bParts = ['FOLSOM-POOL','FOLSOM-POOL','FOLSOM-POOL','FOLSOM-POOL',
               'FOLSOM-CONSERVATION','FOLSOM-CONSERVATION',
@@ -91,7 +90,6 @@ def archiveSimulationResults(aepList, pattern, patternName, resultsDir, simulati
               'MAX_STOR_160']
 
     simulationDssFile = r"%s\simulation.dss" %(simulationDssDir)
-    resultsDssFile = r"%s\RR-%s_%s_results.dss" %(resultsDir, patternName, seedNumber)
 
     lookupSimulationDParts = {
         '1986': {
@@ -105,9 +103,9 @@ def archiveSimulationResults(aepList, pattern, patternName, resultsDir, simulati
 
     simulationDParts = lookupSimulationDParts[pattern]
     pathNames = []
+
     for bpart, cpart in zip(bParts,cParts):
         for aep in aepList:
-
             for dpartKey in sorted(simulationDParts.keys()):
                 dpart = simulationDParts[dpartKey]
                 pathName = "//%s/%s/%s/1HOUR/C:000%s|RR-%s---0/" % (bpart, cpart,dpart, aep, patternName)
@@ -143,15 +141,16 @@ def writeResultsToFile(pathNames, simulationDssFile, resultsDssFile,n):
                 results.put(newTs)
                 results.done()
         else:
-            print 'here'
+            print 'BAD DSS WRITE!!!!!'
     fid.done()
 
-def archiveRandomHindcasts(tempDb, resultsDir, aepList, n, patternName, recordID, templateDb, seedNumber):
+def archiveRandomHindcasts(aepList, n, patternName, recordID, templateDbFileName, archiveDbFile):
 
     nStr = str(n).zfill(3)
 
-    archiveDbFile = r"%s\RR-%s_%s_results.db" %(resultsDir, patternName, seedNumber)
     archiveDb = SqliteDatabase(archiveDbFile, SqliteDatabase.CREATION_MODE.CREATE_NEW_OR_OPEN_EXISTING_UPDATE)
+
+    tempDb = SqliteDatabase(templateDbFileName, SqliteDatabase.CREATION_MODE.CREATE_NEW_OR_OPEN_EXISTING_UPDATE)
 
     for aep in aepList:
 
@@ -185,7 +184,6 @@ def archiveRandomHindcasts(tempDb, resultsDir, aepList, n, patternName, recordID
     tempDb.close()
     archiveDb.close()
 
-
 memberLookup = dict(zip(range(0,41), range(1980,2021)))
 patternLookup = {'1986':'X3WM', '1997':'Y2WM'}
 simNameLookup = {'1986':'X3WM_HC', '1997':'Y2WM_HC'}
@@ -215,8 +213,13 @@ randomDates = {
 
 def main(baseRoot):
 
-    watershedWkspFile = r"%s\models\R703F3_SOU_RR_20230717\R703F3_SOU_RR_20230717.wksp" %(baseRoot)
+    # Define output directory for archived DSS files and sqlite databases
     resultsDir = r"%s\resultsEMS" %(baseRoot)
+
+    # Define paths to res sim model directories
+    modelDir = os.path.join(baseRoot,'models' ,'R703F3_SOU_RR_20230717')
+    watershedWkspFile = r"%s/R703F3_SOU_RR_20230717.wksp" %(modelDir)
+    databaseDir = os.path.join(modelDir,'shared','EMS_DBs')
 
     if not os.path.exists(resultsDir):
         os.makedirs(resultsDir)
@@ -228,7 +231,7 @@ def main(baseRoot):
         simName = simNameLookup[pattern]
         patternName = patternLookup[pattern]
 
-        simulationDssDir = os.path.join(baseRoot,'models' ,'R703F3_SOU_RR_20230717','rss',simName)
+        simulationDssDir = os.path.join(modelDir,'rss',simName)
         cleanExtractDssPath = r"%s\staticFiles\%s\simulation.dss" %(baseRoot, patternName)
 
         # Set Up logging file to keep track of the selected members
@@ -241,10 +244,12 @@ def main(baseRoot):
         # Initialize random number generator
         for seedNumber, seed in enumerate(patternSeeds[pattern]):
 
+            archiveDbFile = r"%s\RR-%s_%s_results.db" %(resultsDir, patternName, seedNumber)
+            resultsDssFile = r"%s\RR-%s_%s_results.dss" %(resultsDir, patternName, seedNumber)
             random = Random(seed)
 
             loggerSeed = myLogger("Begin Processing %s (%s) with seed %s..." %(pattern, patternName, seed), loggingFile)
-            loggerMain.info("Initial Seed for random numbers: \t %s" %(seed))
+            loggerSeed.info("Initial Seed for random numbers: \t %s" %(seed))
 
             # Define Record ID for creating new ensemble time series
             recordID = RecordIdentifier("american.FOLSOM-POOL","flow")
@@ -253,7 +258,7 @@ def main(baseRoot):
             aepList = list(range(200,550,50))
 
             # Outer loop that defines how many times the ensemble member shuffle
-            for n in range(0,500):
+            for n in range(0,5):
 
                 loggerN = myLogger("Random shuffle number: %s" %(n), loggingFile)
                 loggerN.info("Processing shuffle number %s of 500..." %(n))
@@ -264,13 +269,13 @@ def main(baseRoot):
                 # Move clean extract DSS file to rss folder
                 shutil.copy(cleanExtractDssPath,simulationDssDir)
 
-                # Define input database the full ensemble time series (41-members for each issue date)
-                inputDB = r"%s/models/R703F3_SOU_RR_20230717/shared/EMS_DBs/%s_all_AEPs_topFiftyPercent.db" %(baseRoot, pattern)
+                # Define input database the full ensemble time series (21-members for each issue date)
+                inputDB = r"%s/%s_all_AEPs_topFiftyPercent.db" %(databaseDir, pattern)
                 db = SqliteDatabase(inputDB, SqliteDatabase.CREATION_MODE.OPEN_EXISTING_UPDATE)
 
                 # Define Target database that will contain the random members (1-member for each issue date)
-                templateDb = r"%s/models/R703F3_SOU_RR_20230717/shared/EMS_DBs/template.db" %(baseRoot)
-                tempDb = SqliteDatabase(templateDb, SqliteDatabase.CREATION_MODE.CREATE_NEW_OR_OPEN_EXISTING_UPDATE)
+                templateDbFileName = r"%s/template.db" %(databaseDir)
+                tempDb = SqliteDatabase(templateDbFileName, SqliteDatabase.CREATION_MODE.CREATE_NEW_OR_OPEN_EXISTING_UPDATE)
 
                 # Loop through each AEP
                 for aep in aepList:
@@ -279,11 +284,11 @@ def main(baseRoot):
                     loggerAep = myLogger("scaling: %s" %(aep), loggingFile)
                     loggerAep.info('Processing %s aep....'  %(aep))
 
-                    # Define version identifier used to query the full ensemble time series database
+                    # Define version identifier used to query the limited 21-member ensemble time series database
                     version = "%s_%s" %(pattern, aep)
                     versionID = VersionIdentifier("american.FOLSOM-POOL", "flow",version)
 
-                    # Query the full ensemble database for this AEP
+                    # Query the limited ensemble database for this AEP
                     eTs = db.getEnsembleTimeSeries(versionID)
 
                     # Define list of all forecast issuance
@@ -297,8 +302,8 @@ def main(baseRoot):
                     for issueDate in issueDates:
 
                         if issueDate in datesToRandomize:
-                            # Randomly select a member [0-40]
-                            randomMember = random.nextInt(41)
+                            # Randomly select a member [0-20]
+                            randomMember = random.nextInt(21)
                         else:
                             randomMember = 0
 
@@ -317,7 +322,6 @@ def main(baseRoot):
                     # Log which members were selected for each issue date
                     shuffleLog = myLogger("shuffleLog: %s" %(aep), loggingFile)
                     shuffleLog.info("IssueDates %s " %([issueDate.toString() for issueDate in issueDates]))
-                    shuffleLog.info('Members Selected: %s' %([memberLookup[memberChosen] for memberChosen in membersChosen]))
 
                     # Write random ensemble time series to template db
                     tempDb.write(newEts)
@@ -331,10 +335,8 @@ def main(baseRoot):
                 HecDSSFileDataManager().closeAllFiles()
 
                 # Archive process results
-                archiveSimulationResults(aepList, pattern, patternName, resultsDir, simulationDssDir,n, seedNumber)
-
-                tempDb = SqliteDatabase(templateDb, SqliteDatabase.CREATION_MODE.CREATE_NEW_OR_OPEN_EXISTING_UPDATE)
-                archiveRandomHindcasts(tempDb, resultsDir, aepList, n, patternName, recordID, templateDb, seedNumber)
+                archiveSimulationResults(aepList, pattern, patternName, resultsDssFile, simulationDssDir,n)
+                archiveRandomHindcasts(aepList, n, patternName, recordID, templateDbFileName, archiveDbFile)
 
                 # Delete simulation and template database for next simulation
                 HecDSSFileDataManager().closeAllFiles()
@@ -344,7 +346,7 @@ def main(baseRoot):
 
                 # Delete simulation files for next iteration
                 os.remove(r"%s\simulation.dss" %(simulationDssDir))
-                os.remove(templateDb)
+                os.remove(templateDbFileName)
 
     sys.exit("Finished Computing!")
 
