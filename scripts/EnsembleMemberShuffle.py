@@ -265,7 +265,7 @@ def main(baseRoot):
                 shutil.copy(cleanExtractDssPath,simulationDssDir)
 
                 # Define input database the full ensemble time series (41-members for each issue date)
-                inputDB = r"%s/models/R703F3_SOU_RR_20230717/shared/EMS_DBs/%s_all_AEPs.db" %(baseRoot, pattern)
+                inputDB = r"%s/models/R703F3_SOU_RR_20230717/shared/EMS_DBs/%s_all_AEPs_topFiftyPercent.db" %(baseRoot, pattern)
                 db = SqliteDatabase(inputDB, SqliteDatabase.CREATION_MODE.OPEN_EXISTING_UPDATE)
 
                 # Define Target database that will contain the random members (1-member for each issue date)
